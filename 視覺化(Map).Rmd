@@ -1,0 +1,413 @@
+---
+title: "Map"
+author: B082040005 高念慈
+output: html_document
+date: '2022-04-24'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# {r,echo = FALSE} 隱藏程式碼
+
+```
+
+## 美國凶殺案和離婚率的關係
+
+##### 非地圖變數 : 
+      
++ 凶殺率，離婚率皆為連續型資料
++ NOTE : 比率是連續型資料，用漸層色是個好選擇
+
+##### 地圖格式 :
+      
++ Choropleth map，又稱等值線圖，面量圖
++ 把資料用顏色畫在對應地圖上的一種資料視覺化方式
+
+
+```{r results='hide', message=FALSE, warning=FALSE}
+# install.packages('maps')
+# install.packages("ggrepel")
+library(maps) # For map data
+library(ggplot2) # ggplot2 must be loaded to use map_data()
+library(dplyr) # For arrange() function
+library(vcd) # For mosaic()
+library(reshape2) # For scale_fill_gradient2,在寬格式和長格式之間轉換數據
+
+library(ggrepel) # 排斥重疊的文本標籤
+library(dendextend) # 樹狀圖相關
+
+```
+
+
+```{r, warning=FALSE}
+states_map <- map_data("state") # Get map data for USA
+str(states_map)
+
+#'usa' (美國的輪廓)
+#'state' (美國的每個州)
+#'county' (美國的每個縣)
+
+```
+
+```{r}
+# geom_polygon():帶有填充的基本地圖，預設笛卡兒坐標系
+# polygon:多邊形
+
+ggplot(states_map, aes(x = long, y = lat, group = group)) +
+  geom_polygon(fill = "white", colour = "black")
+
+```
+
+```{r}
+# geom_path():無填充，墨卡托投影(具有逐漸變化的緯度線間距)
+
+ggplot(states_map, aes(x = long, y = lat, group = group)) +
+  geom_path() + coord_map("mercator")
+
+```
+
+```{r,echo = FALSE}
+#來源:https://r-graphics.org/recipe-miscgraph-map
+
+#map_data()參數
+#long:經度；lat:緯度
+#group:每個多邊形的分組變量
+#      一個區域或子區域可能有多個多邊形，例如，如果它包含島嶼
+#order:連接組內每個點的順序
+#region:粗略的國家名稱，雖然還有一些其他的對象（例如一些湖泊）
+#例:region = c("Japan", "China", "North Korea", "South Korea")
+#subregion:一個區域內的子區域的名稱，可以包含多個組
+#          例，阿拉斯加次區域包括許多島嶼，每個島嶼都有自己的群 
+
+```
+
+```{r}
+mapdata = read.csv("C:/Users/user/Desktop/statisticandr/visual/southorAll/ncovr/NAT.csv")
+#str(mapdata)
+
+#來源:https://geodacenter.github.io/data-and-lab/ncovr/
+
+```
+
+```{r}
+#主要變數介紹:3085筆資料，69個變數
+
+#NAME:縣名
+#STATE_NAME:州名
+#STATE_FIPS:州代碼 (character)
+#CNTY_FIPS:縣代碼 (character)
+#FIPS:組合的州和縣代碼 (character)
+#STFIPS:州代碼(numeric)
+#COFIPS:縣代碼(numeric)
+#FIPSNO:Fips代碼作為數值變量
+#SOUTH:南部縣的虛擬變量（South = 1）
+
+#HR**:每100,000人的兇殺率(1960, 1970, 1980, 1990)
+#每10萬人有?人死亡
+#HR60 HR70 HR80 HR90
+
+#HC**:兇殺案數量，以 1960 年、1970 年、1980 年、1990 年為中心的三年平均值
+
+#PO**:1960年、1970年、1980年、1990年縣域人口
+
+#UE**:1960、1970、1980、1990 年的失業率
+#UE60 UE70 UE80 UE90
+
+#DV**:1960年、1970年、1980年、1990年離婚率（14歲以上男性離婚率）
+#DV60 DV60 DV60 DV60
+
+```
+
+```{r}
+new_mapdata = mapdata[c('STATE_NAME','HR80','DV80','HC80','PO80','UE80')]
+
+# STATE_NAME 改 region 再轉小寫方便合併
+names(new_mapdata)[1] = "region"
+new_mapdata$region =  tolower(new_mapdata$region)
+
+str(new_mapdata)
+summary(new_mapdata)
+
+```
+
+```{r}
+homicide = 
+  new_mapdata %>% group_by(region) %>% summarise(homicide_rate = 100*sum(HC80)/sum(PO80),divorce_rate = sum(DV80*PO80/100)/sum(PO80),unemployment_rate = sum(UE80*PO80/100)/sum(PO80))
+
+```
+
+```{r}
+# 美國凶殺案和離婚率的相關係數
+# 0.3 ~ 0.7:中等相關
+
+cor.test(homicide$divorce_rate,homicide$homicide_rate)
+
+plot(homicide$divorce_rate,homicide$homicide_rate)
+abline(lm(homicide$homicide_rate~homicide$divorce_rate),col='red')
+legend('topleft', legend = c('r = 0.3661465', 'p-value = 0.00967'))
+
+```
+```{r}
+hc = homicide[,2:3] %>% scale %>% dist %>% hclust # 層級式集群分析
+                                                  # 標準化(每個變數的(尺度)影響變一樣)-距離-分群
+
+plot(hc)
+k=6;rect.hclust(hc, k=k, border="red")            # 依據dendrogram(樹狀圖)做切割
+                                                  # hclust的dendextend不會告訴你怎麼切，要自己框群
+
+```
+```{r}
+
+hc %>% as.dendrogram %>% color_branches(k) %>% color_labels(k,col='black') %>% plot
+
+#as.dendrogram:提供處理樹狀結構的通用函數。
+#替代層次聚類和分類/回歸樹中的類似功能，
+#以便所有這些都可以使用相同的引擎來繪製或切割樹
+
+#color_branches(k):根據子集群為樹的分支著色
+#color_labels(k,col='white')根據子集群為dend的標籤著色
+
+```
+```{r, warning=FALSE}
+homicide$region_factor = cutree(hc, k=6) %>% factor  # 產生分群向量
+homicide$region_factor
+
+```
+
+```{r}
+
+ggplot(homicide, aes(x=divorce_rate, y=homicide_rate, col=region_factor)) +  # 離婚率VS凶殺率
+  geom_point(size=3, alpha=0.5)+
+#  geom_smooth(formula=y~x, method = lm)+
+  geom_abline(slope = 0.1462290 , intercept = 0.0007873, col='red', size=0.7)+
+  annotate("text", x=0.043 , y=0.0285 ,label='r = 0.3661465' )+
+  annotate("text", x=0.045 , y=0.0265 ,label='p-value = 0.00967' )
+
+# lm(homicide$homicide_rate~homicide$divorce_rate)，slope = 0.1462290，intercept = 0.0007873
+
+```
+
+
+
+
+```{r}
+# 美國凶殺案和失業率的相關係數
+# p-value = 0.5285，沒顯著相關
+
+cor.test(homicide$unemployment_rate,homicide$homicide_rate)
+plot(homicide$unemployment_rate,homicide$homicide_rate)
+abline(lm(homicide$homicide_rate~homicide$unemployment_rate),col='red')
+legend('topleft', legend = c('r = 0.09222083', 'p-value = 0.5285'))
+
+```
+
+```{r}
+#為什麼那麼醜
+#pvalue 0.23821 不顯著相關
+#
+
+mosaic(~divorce_rate+homicide_rate, data=homicide, shade=T,color=TRUE,legend=TRUE,margins=c(0,1,0,0),legend_args=list(fontsize=9))
+
+```
+
+```{r}
+# Merge the data sets together
+finaldata = merge(states_map, homicide, by = "region")
+
+# 取得美國各州中心座標資料
+StateCenter = data.frame(region=tolower(state.name),lon=state.center$x,lat=state.center$y)
+finaldata = merge(finaldata, StateCenter, by = 'region')
+
+# 合併後，順序發生了變化，會導致多邊形繪製的順序不正確。所以將對數據進行排序
+# Sort by group, then order
+finaldata <- arrange(finaldata, group, order)
+
+```
+
+```{r}
+# Find the quantile bounds
+qa = quantile(finaldata$divorce_rate , probs=seq(0,1,0.25))
+qa
+# Add a column of the quantile category
+
+finaldata$divorce_q <- cut(finaldata$divorce_rate, breaks=qa,
+                        labels = c("0-25%", "25-50%", "50-75%", "75-100%"),
+                        include.lowest = TRUE)
+
+#breaks = 0.03580657 0.04434391 0.05386772 0.05848573 0.11206289
+#right=TRUE，區間左開右閉
+#include.lowest=TURE基本上包括最低值
+
+```
+
+```{r}
+# 各州兇殺率
+ghc = 
+  ggplot(finaldata, aes(x = long, y = lat.x, group = group, fill = homicide_rate)) +
+  geom_polygon(colour = "black") +
+  coord_map("polyconic")+
+  scale_fill_gradient2(low = "orange", mid = "white", high = "light blue",
+                       midpoint = median(finaldata$homicide_rate))+
+  labs(fill = "Homicide rate")+
+  theme_void()
+ghc
+
+# 多圓錐投影:平行線為非同心圓弧，但赤道為直線
+# theme_void():刪除背景元素
+# scale_colour_gradient2():三色梯度，順序為低-中-高
+# 中點預設值是0，可以用引數midpoint 將其設定為任意值
+
+```
+
+```{r}
+#各州離婚率
+gdv = 
+  ggplot(finaldata, aes(x = long, y = lat.x, group = group, fill = divorce_rate)) +
+  geom_polygon(colour = "black") +
+  coord_map("polyconic")+
+  scale_fill_gradient2(low = "orange", mid = "white", high = "light blue",
+                       midpoint = median(finaldata$divorce_rate))+
+  labs(fill = "Divorce rate")+
+  theme_void()
+gdv
+
+# 多圓錐投影:平行線為非同心圓弧，但赤道為直線
+
+# scale_colour_gradient2():三色梯度，順序為低-中-高
+# 中點預設值是0，可以用引數midpoint 將其設定為任意值
+
+```
+
+```{r}
+
+GHC = 
+  ghc +
+  labs(title = 'USA states',
+       subtitle = "Relation with Homicide rate")+
+  geom_text(data = finaldata, aes(x = lon, y = lat.y, label = region),size = 2.2)
+GHC
+
+```
+
+```{r}
+
+GDV = 
+  gdv +
+  labs(title = 'USA states',
+       subtitle = "Relation with Divorce rate")+
+  geom_text(data = finaldata, aes(x = lon, y = lat.y, label = region),size = 2.2)
+GDV
+
+```
+
+```{r}
+
+finalgraph = 
+  ghc +
+  labs(title = 'USA states',
+       subtitle = "Relation with Homicide rate and Divorce rate")+
+  geom_point(data=finaldata, aes(x=lon, y=lat.y, size=divorce_rate),shape=21,fill="#33CCFF", color = 'black')+
+  scale_size(range=c(1,10))+
+  geom_text(data = finaldata, aes(x = lon, y = lat.y, label = region),size = 2.2)
+finalgraph
+
+```
+```{r, warning=FALSE}
+hcgraph = 
+  ghc+
+  labs(title = 'USA states',
+       subtitle = "Relation with Homicide rate and Divorce rate")+
+  
+  geom_point(data=finaldata, aes(x=lon, y=lat.y,size=region_factor), 
+             fill=finaldata$region_factor,
+              shape=21, color='black')+
+ 
+  geom_text(data = finaldata, aes(x = lon, y = lat.y, label = region),size = 2.2)
+
+hcgraph
+
+# fill=region_factor #沒法放在 aes()裡 #離散連續?
+# label='region_factor'
+# scale_color_manual(values = c('1' = 'red', "2" = 'blue','3' = 'orange', "4" = 'yellow','5' = 'green', "6" = 'purple'))
+#  labs(fill=finaldata$region_factor)+
+
+```
+```{r}
+
+ggplot(homicide, aes(x=divorce_rate, y=homicide_rate, col=region_factor)) +  # 離婚率VS凶殺率
+  geom_point(size=3, alpha=0.5)+
+#  geom_smooth(formula=y~x, method = lm)+
+  geom_abline(slope = 0.1462290 , intercept = 0.0007873, col='red', size=0.7)+
+  annotate("text", x=0.043 , y=0.0285 ,label='r = 0.3661465' )+
+  annotate("text", x=0.045 , y=0.0265 ,label='p-value = 0.00967' )
+
+# lm(homicide$homicide_rate~homicide$divorce_rate)，slope = 0.1462290，intercept = 0.0007873
+
+```
+
+```{r}
+df = finaldata %>% group_by(region) %>% slice_sample(n=1)  
+# 拉出來放各州名稱
+# slice_sample(n=1)，各挑一個
+
+```
+
+```{r}
+# 座標重疊
+#
+# 參考: 
+# https://officeguide.cc/r-ggrepel-ggplot2-repel-overlapping-text-labels/
+# geom_label_repel()標注圖層，以方框的文字來標示資料
+# https://ggrepel.slowkow.com/articles/examples.html#make-curved-line-segments-or-arrows-1
+
+# options(ggrepel.max.overlaps = Inf)，每個標籤都一定要用到
+
+ ghc +
+  labs(title = 'USA states',
+       subtitle = "Relation with Divorce rate and Homicide rate")+
+  geom_label_repel(
+    data          = subset(df, lon > -97.5),
+    mapping = aes(x = lon, y = lat.y, label = region),
+    min.segment.length = 0, box.padding = 0.5, force = 0.5,
+    nudge_x       = -68 - subset(df, lon > -97.5)$lon,
+    segment.size  = 0.2,
+    segment.color = "grey50",
+    direction     = "y",
+    hjust         = 0
+  ) +
+  geom_label_repel(
+    data          = subset(df, lon < -97.5),
+    mapping = aes(x = lon, y = lat.y, label = region),
+    min.segment.length = 0, box.padding = 0.5, force = 0.5,
+    nudge_x       = -127 - subset(df, lon < -97.5)$lon,
+    segment.size  = 0.2,
+    segment.color = "grey50",
+    direction     = "y",
+    hjust         = 1
+  ) 
+
+```
+
+### 結論
+
++ 表格  <  雙變數地圖  <  兩張單變數地圖放一起 
++ 地圖呈現不一定比較好 , 不過能發現其他東西
++ EX : 南方凶殺率高 , 西部離婚率高
++ 單看這兩變數關係 , 看相關係數最快 , 畫散佈圖
+
+<br><hr>
+
+```{r,echo=FALSE}
+# install.packages(c("choroplethr","choroplethrMaps"))
+# 畫面量圖、把統計資料用顏色畫在對應的地圖上
+# install.packages('sf')
+# 對空間矢量數據進行編碼的標準化方式
+# 綁定到“GDAL”以讀取和寫入數據，綁定到“GEOS”進行幾何運算，綁定到“PROJ”進行投影轉換和基準面轉換
+# 默認情況下使用 's2'包在橢球（長/緯度）坐標上進行球面幾何操作
+# install.packages('cartography')
+# 具有使用經典製圖或 GIS 軟件構建的視覺質量的專題地圖
+
+#library(choroplethr)
+#library(sf)
+#library(cartography)
+```

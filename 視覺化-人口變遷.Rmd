@@ -1,0 +1,1071 @@
+---
+title: "視覺化-108~109年各縣市人口變遷"
+author: B082040005 高念慈
+output: 
+  html_document:
+    highlight: pygments
+    theme: flatly
+    css: ../etc/style.css
+date: "`r Sys.Date()`"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r results='hide', message=FALSE, warning=FALSE, echo=F}
+# Formating Codes.  Do not change the codes in this chunk !!
+# rm(list=ls(all=T))
+knitr::opts_chunk$set(comment = NA)
+knitr::opts_knit$set(global.par = TRUE)
+par(cex=0.8,pin=c(15,8))
+options(scipen=20, digits=5, width=80)
+if(!require(pacman)) install.packages("pacman")
+if(!require(plotly)) install.packages("plotly")
+if(!require(chorddiag)) devtools::install_github("mattflor/chorddiag")
+if(!require(emo)) devtools::install_github("hadley/emo")
+pacman::p_load(dplyr,ggplot2,caTools,ROCR,chorddiag,plotly)
+pacman::p_load(magrittr, readr, caTools, ggplot2, dplyr, vcd, latex2exp,Matrix,tidyr)
+pacman::p_load(car, GGally, mvtnorm)   # GGally:平行坐標圖
+library(corrplot)   # 相關係數矩陣圖
+library(seriation)  # 序列化
+library(magrittr)   # corrRect() 可在繪圖上添加矩形
+pacman::p_load(FactoMineR, factoextra) # 多元尺度分析(MDS)
+library(ggrepel) # 排斥重疊的文本標籤
+library(MASS)    # 基礎平行坐標圖
+
+
+# rm(list=ls(all=T))
+```
+
+### 變數介紹 : 20 個縣市 & 10 個變數
+
+### 1.1 輸入資料 
+
+```{r}
+
+# 0. 社會變遷
+population_change_108 = read.csv("C:/Users/user/Desktop/statisticandr/visual/population/0_108_population_change.csv")   # 108 人口變化
+population_change_109 = read.csv("C:/Users/user/Desktop/statisticandr/visual/population/0_109_population_change.csv")   # 109 人口變化
+
+# 1. 房價所得比 : 每坪房價/每戶可支配所得中位數
+house108 = read.csv("C:/Users/user/Desktop/statisticandr/visual/population/1_108_house.csv")
+house109 = read.csv("C:/Users/user/Desktop/statisticandr/visual/population/1_109_house.csv")
+
+# 2. 失業率 : 失業人數/勞動力人數 or 失業率變化
+unemployment108 = read.csv("C:/Users/user/Desktop/statisticandr/visual/population/2_108_unemployment.csv")
+unemployment109 = read.csv("C:/Users/user/Desktop/statisticandr/visual/population/2_109_unemployment.csv")
+
+# 3. 產業 : 耕地率:耕地面積占土地面積之百分比
+arable_land108 = read.csv("C:/Users/user/Desktop/statisticandr/visual/population/3_108_arable_land.csv")
+arable_land109 = read.csv("C:/Users/user/Desktop/statisticandr/visual/population/3_109_arable_land.csv")
+
+# 4. 醫療照護 : 平均每千人可使用病床數 (醫療家數 or 護產機構)
+medical109 = read.csv("C:/Users/user/Desktop/statisticandr/visual/population/4_109_medical.csv")
+maternity_care109 = read.csv("C:/Users/user/Desktop/statisticandr/visual/population/4_109_maternity care.csv")
+
+# 5. 犯罪人口率(人/10萬) 
+crime108 = read.csv("C:/Users/user/Desktop/statisticandr/visual/population/5_108_crime.csv")
+crime109 = read.csv("C:/Users/user/Desktop/statisticandr/visual/population/5_109_crime.csv")
+
+# 6. 交通意外發生件數/人口
+transportation108 = read.csv("C:/Users/user/Desktop/statisticandr/visual/population/6_108_transportation.csv")
+transportation109 = read.csv("C:/Users/user/Desktop/statisticandr/visual/population/6_109_transportation.csv")
+population109 = read.csv("C:/Users/user/Desktop/statisticandr/visual/population/109_population.csv")
+
+# 7. 老化指數 : (老年/幼年)*100
+Aging_Index109 = read.csv("C:/Users/user/Desktop/statisticandr/visual/population/7_109_Aging_Index.csv")
+
+# 8. 政府歲出
+year_out108 = read.csv("C:/Users/user/Desktop/statisticandr/visual/population/8_108_year_out.csv")
+
+# 9. 平均每人賦稅
+tax109 = read.csv("C:/Users/user/Desktop/statisticandr/visual/population/9_109_tax.csv")
+
+# 10. 平均每人居住面積 
+income108 = read.csv("C:/Users/user/Desktop/statisticandr/visual/population/10_108_income.csv")
+
+```
+
+### 1.2 抓出需要的資料
+
++ merge(x, y, by = "name", all = T) # all 是用來詢問是否顯示所有資料
++ Reduce函數是將每次計算後的結果保留，並與下一個數字進行計算
+
+```{r}
+
+df1 = population_change_108[,c(2,4)]  # 108 社會增加
+df2 = population_change_109[,c(2,4)]  # 109 社會增加
+
+# 看房價所得比增加多少
+# 不含車位_各建物型態合計面積、不含車位_各建物型態整體中位數房價、含車位_各建物型態合計面積、含車位_各建物型態整體中位數房價
+df3 = house108[c('COUNTY','LINF02_T','LINF03_T','LINF05_T','LINF06_T')]  
+df4 = house109[c('COUNTY','LINF02_T','LINF03_T','LINF05_T','LINF06_T')]
+
+# 看失業率上升多少 or 單看失業率
+df5 = unemployment108[c(2,3)]
+df6 = unemployment109[c(2,3)]
+
+# 看109年耕地率
+# df7 = arable_land108[c('COUNTY','COLUMN7')]  # 刪
+df8 = arable_land109[c('COUNTY','COLUMN7')]
+
+# 109年醫療照護，看數量
+df9 = medical109[c(2,6)]         # 醫療院所平均每千人擁有病床數
+df10 = maternity_care109[c(2,6)] # 醫療院所平均每千人擁有病床數
+
+# 109年犯罪人口率(人/10萬) 
+# df11 = crime108[c(2,3)]
+df12 = crime109[c(2,3)]
+
+# 109年交通意外發生件數/人口
+# df13 = transportation108[c(3,5)] # 交通意外發生件數
+df14 = transportation109[c(3,5)]   # 交通意外發生件數
+df15 = population109[c(2,4)]       # 人口數
+
+# 7. 109年老化指數 : (老年/幼年)*100
+df16 = Aging_Index109[c('COUNTY','P_DEN','A65_A0A14_RAT')] # 人口密度、老化指數
+
+# 8. 108年政府歲出
+df17 = year_out108[c(2,4)]
+
+# 9. 109年平均每人賦稅
+df18 = tax109[c(2,4)]
+
+# 10. 108年平均每人居住面積 
+df19 = income108[c('COUNTY','COLUMN11','COLUMN13')]  # 每戶可支配所得中位數、平均每人居住面積
+
+data0 = Reduce(function(x,y)merge(x, y, by = 'COUNTY', all = T),
+               list(df1, df2, df3, df4, df5, df6, df8, df9, df10, df12, df14, df15, df16, df17, df18, df19),
+               accumulate = FALSE)
+
+```
+<hr>
+##### 改成中文欄位名稱
+
++ transmute 函數返回與 mutate 相同的新變量。但是，它不保留我們的原始數據！
++ [6.7 新增衍生變數](https://bookdown.org/tonykuoyj/eloquentr/dplyr.html#mutate)
+
+```{r message=F, warning=F}
+
+data1 = data0 %>% transmute(
+  `縣市名稱` = COUNTY,
+  `108年社會增加人數` = as.numeric(SOCIAL_INC_CNT.x),
+  `109年社會增加人數` = as.numeric(SOCIAL_INC_CNT.y),
+  `108年不含車位_各建物型態合計面積` = as.numeric(LINF02_T.x),
+  `108年不含車位_各建物型態整體中位數房價` = as.numeric(LINF03_T.x),
+  `108年含車位_各建物型態合計面積` = as.numeric(LINF05_T.x),
+  `108年含車位_各建物型態整體中位數房價` = as.numeric(LINF06_T.x),
+  `109年不含車位_各建物型態合計面積` = as.numeric(LINF02_T.y),
+  `109年不含車位_各建物型態整體中位數房價` = as.numeric(LINF03_T.y),
+  `109年含車位_各建物型態合計面積` = as.numeric(LINF05_T.y),
+  `109年含車位_各建物型態整體中位數房價` = as.numeric(LINF06_T.y),
+  `108年失業率` = as.numeric(COLUMN1.x),
+  `109年失業率` = as.numeric(COLUMN1.y),
+  `109年耕地率` = as.numeric(COLUMN7),
+  `109年醫療院所平均每千人擁有病床數` = as.numeric(H_SRVB),
+  `109年護產機構平均每千人擁有病床數` = as.numeric(P_SRVB), 
+  `109年犯罪人口率` = as.numeric(COLUMN1),
+  `109年交通事故發生件數` = as.numeric(FLD02),
+  `109年人口數` = as.numeric(P_CNT),
+  `109年人口密度` = as.numeric(P_DEN),
+  `109年老化指數` = as.numeric(A65_A0A14_RAT),
+  `108年政府歲出` = as.numeric(COLUMN2.x),
+  `109年平均每人稅賦` = as.numeric(COLUMN2.y),
+  `108年每戶可支配所得中位數` = as.numeric(COLUMN11),
+  `108年平均每人居住面積` = as.numeric(COLUMN13) 
+)
+
+```
+
+```{r}
+data1 <- data1[-c(3,10,15,24),]
+# str(data1)
+```
+<hr>
+##### 10 個變數 和 20 個縣市
+
++  0. 108 社會增加  --> 2
++  0. 109 社會增加  --> 3
++  0. 社會變遷   --> 2+3
++  1. 房價所得比 : 每坪房價/每戶可支配所得中位數
++  1. 看房價所得比增加多少
++  1. 108年不含車位  --> (5/4)/24
++  1. 108年含車位    --> (7/6)/24
++  1. 109年不含車位  --> (9/8)/24
++  1. 109年含車位    --> (11/10)/24
++  1. 不含車位增加  --> (9/8)/24 - (5/4)/24  
++  1. 含車位增加    --> (11/10)/24 - (7/6)/24
++  2. 失業率 : 失業人數/勞動力人數 or 失業率變化
++  2. 108年失業率  --> 12 
++  2. 109年失業率  --> 13
++  2. 失業率變化   --> 13 - 12
++  3. 產業 : 耕地率:耕地面積占土地面積之百分比  # 看109年耕地率  --> 14
++  4. 109年醫療照護 : 平均每千人可使用病床數 (醫療家數 or 護產機構)   # 看數量
++  4. --> 15
++  4. --> 16
++  5. 109年犯罪人口率(人/10萬)  --> 17
++  6. 109年交通意外發生件數/人口  --> 18/19
++  7. 109年老化指數 : (老年/幼年)*100 --> 21
++  8. 108年政府歲出  --> 22
++  9. 109年平均每人賦稅  --> 23
++  10. 108年平均每人居住面積 --> 25
++  10. 109年人口密度  --> 20
+
+```{r}
+finaldata = data1 %>% transmute('縣市名稱' = data1[,1],
+                                '108 社會增加人數' = data1[,2],
+                                '109 社會增加人數' = data1[,3],
+                                '社會變遷' = data1[,2] + data1[,3],
+                                '108年不含車位房價所得比' = (data1[,5]/data1[,4])/data1[,24],
+                                '108年含車位房價所得比' = (data1[,7]/data1[,6])/data1[,24],
+                                '109年不含車位房價所得比' = (data1[,9]/data1[,8])/data1[,24],
+                                '109年含車位房價所得比' = (data1[,11]/data1[,10])/data1[,24],
+                                '不含車位房價所得比增加' = (data1[,9]/data1[,8])/data1[,24] - (data1[,5]/data1[,4])/data1[,24],
+                                '含車位房價所得比增加' = (data1[,11]/data1[,10])/data1[,24] - (data1[,7]/data1[,6])/data1[,24],
+                                '108年失業率' = data1[,12],
+                                '109年失業率' = data1[,13],
+                                '失業率變化' = data1[,13] - data1[,12],
+                                '耕地率' = data1[,14],
+                                '醫療數' = data1[,15],
+                                '護產數' = data1[,16],
+                                '犯罪人口率(人/10萬)' = data1[,17],
+                                '交通意外發生件數/人口' = data1[,18]/data1[,19],
+                                '老化指數' = data1[,21],
+                                '政府歲出' = data1[,22],
+                                '平均每人賦稅' = data1[,23],
+                                '平均每人居住面積' = data1[,25],
+                                '人口密度' = data1[,20]
+                                )
+# str(finaldata)
+
+```
+<hr>
+### 2. 資料分布
+
++ [R语言 tidyr包的三个重要函数：gather，spread，separate的用法和举例](https://blog.csdn.net/six66667/article/details/84888644)
+
+```{r}
+gather(finaldata[,c(1:3)],key = '年',value = '數量', -'縣市名稱') %>%
+  ggplot(aes(縣市名稱,數量,fill=年)) +
+  geom_col(position='dodge', alpha=0.6) +
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 30, hjust=1, vjust=1))+
+  labs(title='108、109 各縣市社會增加數',y="")
+
+# gather : 以 x 為主，轉 df 表格，### 都要用名字
+# gather()
+# 第一个参数放的是原数据，数据类型要是一个数据框
+# 下面传一个键值对，名字是自己起的，这两个值是做新转换成的二维表的表头，即两个变量名
+# 第四个是选中要转置的列，这个参数不写的话就默认全部转置
+# 后面还可以加可选参数 na.rm，如果na.rm = TRUE，那么将会在新表中去除原表中的缺失值(NA)
+
+# https://blog.csdn.net/six66667/article/details/84888644
+# 结果:行列转换过来了，第一个参数是原数据stu，二、三两个参数是键值对（性别，人数），第四个表示减去（除去grade列，就只转置剩下两列）
+
+```
+
++ 可以看到 108、109社會增加人數大部分都是同方向的
++ 唯二的反向皆為直轄市(高雄、台南)，且都在109年得到負的社會增加
+
+```{r}
+
+ggplot(finaldata[,c(1,4)],aes(x=finaldata[,c(1)], y= finaldata[,c(4)]))+
+  geom_bar(stat = "identity", color="black",fill='lightblue')+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 30, hjust=1, vjust=1))+
+  labs(title="各縣市108~109年社會變遷")+
+  xlab("縣市") + ylab("社會變遷")
+
+# hjust是水平对齐方式，0为左，1为右，0.5居中
+# vjust是垂直对齐方式，0底对齐，1为顶对齐，0.5居中
+
+```
+
++ 台北居 , 大不易
+
++ 以台北 , 往外(南)遷移
+
+
+```{r}
+
+ggplot(finaldata[,c(1,23)],aes(x=finaldata[,c(1)], y= finaldata[,c(23)]))+
+  geom_bar(stat = "identity", color="black",fill='lightblue')+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 30, hjust=1, vjust=1))+
+  labs(title="各縣市人口密度")+
+  xlab("縣市") + ylab("密度(人/面積)")
+
+# hjust是水平对齐方式，0为左，1为右，0.5居中
+# vjust是垂直对齐方式，0底对齐，1为顶对齐，0.5居中
+
+```
+
+```{r}
+
+gather(finaldata[,c(1,11:13)],key = '失業',value = '率', -'縣市名稱') %>%
+  ggplot(aes(縣市名稱,率,fill=失業))+
+  geom_col(position='dodge', alpha=0.6) +
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 30, hjust=1, vjust=1))+
+  labs(title='108~109 失業率變化',y="")
+
+```
+
+```{r}
+
+gather(finaldata[,c(1,21)],key = '賦稅',value = '錢', -'縣市名稱') %>%
+  ggplot(aes(縣市名稱,錢))+
+  geom_bar(stat = "identity", color="black",fill='lightblue') +
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 30, hjust=1, vjust=1))+
+  labs(title='平均每人賦稅',y="")
+
+
+```
+
+```{r}
+
+# 未標準化
+
+gather(finaldata[,c(1,9:10)],key = '房價所得比變化',value = '變化', -'縣市名稱') %>%
+  ggplot(aes(縣市名稱,變化,fill=房價所得比變化))+
+  geom_col(position='dodge', alpha=0.6) +
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 30, hjust=1, vjust=1))+
+  labs(title='房價所得比變化',y="")
+
+```
+
+```{r results='hide'}
+
+# 省掉 108 109 社會增加，專注總社會增加
+finaldata1 = finaldata[c(1,4:23)]
+# str(finaldata1)
+
+```
+
+### 三個問題 : Biplot & 熱圖 & 平行座標圖
+
++ 地區在變數上 相似 or 差異 行為
++ 變數 & 人口變動間的關係
++ 變數間在各地區的關係 
+
+##### 變數相關性
+
++ 基本熱圖
+
+```{r}
+
+finaldata3 = finaldata1
+colnames(finaldata3) <- c( '縣', '變化','h1.1','h1.2','h1.3','h1.4',
+                           'h1.5','h1.6','e2.1','e2.2','e2','v3','n4.1',
+                           'n4.2','c5','t6','o7','E8','M9','A10.1','D10.2') 
+
+# cor(finaldata3[,c(2:21)])
+heatmap( cor(finaldata3[,c(2:21)]))
+
+```
+
++ 散點圖矩陣
+
+```{r}
+par(mar=c(4,3,2,1))
+finaldata2 = scale(finaldata1[c(2:21)])
+scatterplotMatrix(finaldata2[,c(1:6)])
+scatterplotMatrix(finaldata2[,c(1, 7:9)])
+scatterplotMatrix(finaldata2[,c(1,10:11)])
+scatterplotMatrix(finaldata2[,c(1,12:16)])
+scatterplotMatrix(finaldata2[,c(1,17:20)])
+
+# car::scatterplotMatrix(W[,3:8])
+# 散點圖矩陣，car包
+
+```
+
+```{r results='hide', message=FALSE, warning=FALSE, echo=F}
+
+# 單純想留，不刪，ggpairs - ggplot2 廣義對圖
+
+#每個變量組合都根據它們是否是：
+#連續：例如“points”（默認下限）、“smooth”、“smooth_loess”、“density”
+#         “cor”（默認上限）或“blank”
+#組合：例如“box”、“box_no_facet”（默認上限）、“dot”
+#         “dot_no_facet”、“facethist”、“facetdensity”、“denstrip”或“blank”
+#離散的：例如“ratio”、“facetbar”或“blank”
+
+#對角線上的圖可以是：
+#連續：“densityDiag”、“barDiag”、“blankDiag”
+#離散：“barDiag”、“blankDiag”
+
+#術語 facet，它是指將單個 plot 拆分為兩個或多個面板（facets）
+
+# https://mran.microsoft.com/snapshot/2016-01-12/web/packages/GGally/vignettes/ggpairs.html
+
+# https://mp.weixin.qq.com/s?__biz=MzA3MTM3NTA5Ng==&mid=2651061214&idx=2&sn=d7f7da833dd5eeaeaeb2ec0bd332bb57&chksm=84d9da49b3ae535fe87c6e776a9df84ced981a72a241d1c70d6be9c810b665dc3fc58cb76ae4&scene=21#wechat_redirect
+
+# https://blog.csdn.net/kMD8d5R/article/details/89735027
+
+```
+
+##### corrplot包 熱圖
+
++ [相關係數圖](https://www.twblogs.net/a/5c35ec0abd9eee35b3a56dd9)
++ [相關係數圖pheatmap包](https://blog.csdn.net/lalaxumelala/article/details/86022722)
+
+<br><br>
+### 10 個變數
+
++ 108 ~ 109 年社會變遷 = 變化
++ 房價所得比 : 每坪房價 / 每戶可支配所得中位數
++ 108~109 年 & 是否含車位     4 項 = h1
++ 房價所得比(是否含車位)變化  2 項 = h1
++ 房價
++ 108~109 年 & 是否含車位     4 項 = h1
++ 房價所得比(是否含車位)變化  2 項 = h1
++ 每戶可支配所得 = I9 
++ 失業率 : 失業人數 / 勞動力人數 
++ 108 年失業率 = e2.1
++ 109 年失業率 = e2.2
++ 失業率增加 = e2
++ 產業 : 耕地率 : 耕地面積占土地面積之百分比  
++ 109 年耕地率 = v3
++ 109 年醫療照護 : 平均每千人可使用病床數
++ 醫療家數 = n4.1
++ 護產機構 = n4.2
++ 109 年犯罪人口率(人 / 10萬) = c5
++ 109 年交通意外發生件數 / 人口 = t6
++ 109 年老化指數 : (老年 / 幼年)*100 = o7
++ 108 年政府歲出 = E8
++ 109 年平均每人賦稅 = M9
++ 108 年平均每人居住面積 = A10.1
++ 109 年人口密度 = A10.2
+
+
+
+```{r}
+
+# library(corrplot)
+# dim(finaldata1)   # 20 21
+# method = c("circle", "square", "ellipse", "number", "shade", "color", "pie")
+
+cormatrix =  cor(finaldata3[,c(2:21)])
+corrplot(corr=cormatrix)
+corrplot(corr=round(cormatrix,3), method = "number", number.cex = 0.5) 
+corrplot(corr=cormatrix, method = "color") 
+corrplot(corr=cormatrix, method = "pie") 
+corrplot(corr=cormatrix, method = "shade")
+corrplot(corr=cormatrix, method = "square") 
+corrplot(corr=cormatrix, method = "ellipse")
+
+```
+
+```{r}
+corrplot(corr=cormatrix, type = "upper")
+```
+
+```{r}
+
+# 上三角分不了群
+corrplot(corr=cormatrix,method = "circle", type = "upper",
+         tl.col="red",addCoef.col = "black", number.cex = 0.5)
+
+```
+
+```{r}
+
+# mixed 也分不了群
+corrplot.mixed(corr=round(cormatrix,3),
+               upper = "ellipse",lower = "number",
+               tl.col = "black", number.cex = 0.5,
+               )
+
+# tl.col 修改對角線的顏色
+# lower.col 修改下三角的顏色
+# number.cex修改下三角字體大小
+
+```
+
++ 重新排序相關矩陣 : 可以通過函數“手動”重新排序矩陣corrMatOrder()
++ [corrplot 包簡介](https://cran.r-project.org/web/packages/corrplot/vignettes/corrplot-intro.html)
+
+
+```{r}
+
+# 指定order按hclust聚類方式排序，addrect是添加分組矩形，可自定義分組類
+corrplot(cormatrix,method = "ellipse",order = "hclust",addrect  = 4)
+
+corrplot(corr=cormatrix,method = "ellipse",order = "hclust",
+         tl.col="red",addrect=4,addCoef.col = "black", number.cex = 0.5)
+
+```
+
+```{r results='hide', message=FALSE, warning=FALSE, echo=F}
+
+# library(seriation)
+list_seriation_methods('matrix') # 列出序列化方法
+list_seriation_methods('dist')   # 列出序列化方法
+
+```
+
++ 序列中的方法 “PCA_angle” 和 “HC”，分別與 corrplot() 和 corrMatOrder() 中的 “AOE” 和 “hclust” 相同
+
+```{r}
+
+dist2order = function(corr, method, ...) {
+  d_corr = as.dist(1 - corr)
+  s = seriate(d_corr, method = method, ...)
+  i = get_order(s)
+  return(i)
+}
+
+```
+
+```{r}
+
+# library(magrittr) 
+# corrRect()可以通過三種方式(參數:index、name、 namesMat)在繪圖上添加矩形
+
+COL2(diverging = c("RdBu", "BrBG", "PiYG", "PRGn", "PuOr", "RdYlBu"), n = 200)
+
+i = dist2order(cormatrix, 'HC')
+corrplot(cormatrix[i, i],method = "ellipse", col = COL2('RdBu', 10)) %>% corrRect(c(1,4,10,15,20))
+
+# cl.pos：圖例（顏色）位置，當type=upper或full時，圖例在右表
+# 當type=lower時，圖例在底部，不需要圖例時，只需指定該參數爲n
+
+```
+
+```{r}
+
+i = dist2order(cormatrix, 'ARSA')
+corrplot(cormatrix[i, i],method = "ellipse", col = COL2('RdBu', 10)) %>% 
+  corrRect(name = c('E8','n4.1','o7','t6','h1.2'))
+
+# 用不了 col = COL2('RdBu', 10)
+i = dist2order(cormatrix, 'MDS_nonmetric', col = COL2('RdBu', 10))
+corrplot(cormatrix[i, i],method = "ellipse") %>% 
+  corrRect(name = c('E8','n4.1','c5','v3','A10.1'))
+
+# 用不了 col = COL2('RdBu', 10):error
+i = dist2order(cormatrix, 'QAP_2SUM') 
+corrplot(cormatrix[i, i],method = "ellipse")
+
+i = dist2order(cormatrix, 'Spectral')           # 光譜
+corrplot(cormatrix[i, i],method = "ellipse", col = COL2('RdBu', 10))
+
+# cl.pos：圖例（顏色）位置，當type=upper或full時，圖例在右表
+# 當type=lower時，圖例在底部，不需要圖例時，只需指定該參數爲n
+
+```
+
+```{r}
+testRes = cor.mtest(finaldata3[,c(2:21)], conf.level = 0.95)
+
+## specialized the insignificant value according to the significant level
+corrplot(cormatrix, p.mat = testRes$p, sig.level = 0.10, order = 'hclust', addrect = 4)
+
+
+```
+
+```{r}
+
+corrplot(cormatrix, p.mat = testRes$p, method = 'ellipse',
+         col = COL2('RdBu', 10),type = 'lower',
+         insig='blank',addCoef.col ='black',
+         number.cex = 0.5, order = 'hclust', diag=FALSE) -> p1
+
+# 'pch' (default), 'p-value', 'blank'(空白), 'n', 'label_sig'
+
+corrplot(cormatrix, p.mat = testRes$p, method = 'ellipse', 
+         col = COL2('RdBu', 10),type = 'lower',
+         insig='label_sig',addCoef.col ='black',
+         number.cex = 0.5, order = 'hclust', diag=FALSE)
+
+```
+
+```{r}
+p2 = p1$corrPos %>% filter(yName=='變化' | xName=='變化') %>% arrange(desc(corr))
+p2
+```
+
+```{r}
+finaldata4 = cbind(finaldata3[c(1:2)],scale(finaldata3[c(3:8)]),finaldata3[c(9:21)])
+```
+
+```{r}
+
+# mixed 也分不了群
+
+cormatrix1 =  cor(finaldata4[,c(2:21)])
+
+corrplot.mixed(corr=round(cormatrix1,3),
+               upper = "ellipse",lower = "number",
+               tl.col = "black", number.cex = 0.5,
+               )
+
+# tl.col 修改對角線的顏色
+# lower.col 修改下三角的顏色
+# number.cex修改下三角字體大小
+
+```
+
+```{r}
+finaldata5 = cbind(finaldata3[c(1:2)],scale(finaldata3[c(3:21)]))
+```
+
+```{r}
+
+# mixed 也分不了群
+
+cormatrix2 =  cor(finaldata5[,c(2:21)])
+
+corrplot.mixed(corr=round(cormatrix2,3),
+               upper = "ellipse",lower = "number",
+               tl.col = "black", number.cex = 0.5,
+               )
+
+# tl.col 修改對角線的顏色
+# lower.col 修改下三角的顏色
+# number.cex修改下三角字體大小
+
+```
+
+```{r}
+finaldata6 = cbind(finaldata3[c(1)],scale(finaldata3[c(2:21)]))
+```
+
+```{r}
+
+# mixed 也分不了群
+
+cormatrix3 =  cor(finaldata6[,c(2:21)])
+
+corrplot.mixed(corr=round(cormatrix3,3),
+               upper = "ellipse",lower = "number",
+               tl.col = "black", number.cex = 0.5,
+               )
+
+# tl.col 修改對角線的顏色
+# lower.col 修改下三角的顏色
+# number.cex修改下三角字體大小
+
+```
+
+```{r}
+
+gather(finaldata6[,c(1,7:8)],key = '房價所得比變化',value = '變化', -'縣') %>%
+  ggplot(aes(縣,變化,fill=房價所得比變化))+
+  geom_col(position='dodge', alpha=0.6) +
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 30, hjust=1, vjust=1))+
+  labs(title='房價所得比變化',y="")
+
+```
+
+```{r}
+
+gather(finaldata6[,c(1,3:6)],key = '房價所得比',value = '變化', -'縣') %>%
+  ggplot(aes(縣,變化,fill=房價所得比))+
+  geom_col(position='dodge', alpha=0.6) +
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 30, hjust=1, vjust=1))+
+  labs(title='房價所得比',y="")
+
+```
+
+### 最終使用data3考慮後續
+<br>
+
++ 地區在變數上 相似 or 差異 行為 --> 無法
++ 變數 & 人口變動間的關係 --> 讚
++ 變數間在各地區的關係 --> 無法
+
+```{r}
+
+data2 = data1 %>% transmute('108年不含車位房價' = (data1[,5]/data1[,4]),
+                            '108年含車位房價' = (data1[,7]/data1[,6]),
+                            '109年不含車位房價' = (data1[,9]/data1[,8]),
+                            '109年含車位房價' = (data1[,11]/data1[,10]),
+                            '不含車位房價增加' = (data1[,9]/data1[,8]) - (data1[,5]/data1[,4]),
+                            '含車位房價增加' = (data1[,11]/data1[,10]) - (data1[,7]/data1[,6]),
+                            '每戶可支配所得中位數' = data1[,24])
+
+data3 = cbind(finaldata3[1:2],data2,finaldata3[9:21])
+colnames(data3) <- c( '縣', '變化','h1.1','h1.2','h1.3','h1.4','h1.5',
+                      'h1.6','I9','e2.1','e2.2','e2','v3','n4.1',
+                      'n4.2','c5','t6','o7','E8','M9','A10.1','D10.2') 
+
+```
+
+```{r}
+
+cormatrix4 =  cor(data3[,c(2:22)])
+
+corrplot(cormatrix4,method = "ellipse",order = "hclust",addrect  = 4)
+
+corrplot(corr=cormatrix4,method = "ellipse",order = "hclust",
+         tl.col="red",addrect=4,addCoef.col = "black", number.cex = 0.5)
+
+i = dist2order(cormatrix4, 'HC')
+corrplot(cormatrix4[i, i],method = "ellipse", col = COL2('RdBu', 10)) %>% corrRect(name = c('E8','變化','h1.5','h1.2','o7'))
+
+# cl.pos：圖例（顏色）位置，當type=upper或full時，圖例在右表
+# 當type=lower時，圖例在底部，不需要圖例時，只需指定該參數爲n
+
+```
+
+```{r}
+
+corrplot.mixed(corr=round(cormatrix4[i, i],3),
+               upper = "ellipse",lower = "number",
+               tl.col = "black", number.cex = 0.5,
+               )
+
+```
+
+```{r}
+testRes = cor.mtest(data3[,c(2:22)], conf.level = 0.95)
+
+## specialized the insignificant value according to the significant level
+corrplot(cormatrix4, p.mat = testRes$p, sig.level = 0.10, order = 'hclust', addrect = 4)
+
+
+```
+
+```{r}
+
+corrplot(cormatrix4, p.mat = testRes$p, method = 'ellipse',
+         col = COL2('RdBu', 10),type = 'lower',
+         insig='blank',addCoef.col ='black',
+         number.cex = 0.5, order = 'hclust', diag=FALSE) -> p1
+
+# 'pch' (default), 'p-value', 'blank'(空白), 'n', 'label_sig'
+
+corrplot(cormatrix4, p.mat = testRes$p, method = 'ellipse', 
+         col = COL2('RdBu', 10),type = 'lower',
+         insig='label_sig',addCoef.col ='black',
+         number.cex = 0.5, order = 'hclust', diag=FALSE)
+
+```
+
+```{r}
+p3 = p1$corrPos %>% filter(yName=='變化' | xName=='變化') %>% arrange(desc(corr))
+p3
+```
+
++ e2.1 = 108年失業率 : 0.35
++ t6 = 平均交通意外發生數 : 0.3
++ A10.1 = 平均每人居住面積 : 0.26
+
++ n4.2 = 護產機構平均每千人可使用病床數 : 0.15
++ e2.2 = 109年失業率 : 0.12
+
++ h1.5 : 0.02
++ h1.6 : 0.01
++ v3 : -0.007
++ h1.4 : -0.01
++ h1.2 : -0.01
++ h1.3 : -0.01
++ h1.1 : -0.02
+
++ E8 = 政府歲出 : -0.11
++ e2 = 失業率變化 : -0.14
++ I9 = 每戶可支配所得 : -0.17
+
++ n4.1 = 醫療家數 : -0.3
++ o7 = 老化指數 : -0.3
++ M9 = 平均每人賦稅 : -0.5
++ c5 = 犯罪人口率(人/10萬) : -0.6
++ D10.2 = 人口密度 : -0.62
+
+##### 台灣城鄉差距正在拉近，雖然鄉鎮的就業條件及經濟環境仍不及大都市，但面對高漲房價與物價下，只得被迫犧牲生活品質。
+##### 即使身處城市外圍，軌道通勤仍算方便，房價也相對便宜
+
+
+
+```{r}
+
+ggplot(finaldata5[,c(1,21)],aes(x=finaldata5[,c(1)], y= finaldata5[,c(21)]))+
+  geom_bar(stat = "identity", color="black",fill='lightblue')+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 30, hjust=1, vjust=1))+
+  labs(title="各縣市人口密度")+
+  xlab("縣市") + ylab("密度(人/面積)")
+
+# hjust是水平对齐方式，0为左，1为右，0.5居中
+# vjust是垂直对齐方式，0底对齐，1为顶对齐，0.5居中
+
+```
+
+```{r}
+
+data4 = cbind(data3[c(1:2)],scale(data3[c(3:8)]),data3[c(9:22)])
+gather(data4[,c(1,7:8)],key = '房價變化',value = '變化', -'縣') %>%
+  ggplot(aes(縣,變化,fill=房價變化))+
+  geom_col(position='dodge', alpha=0.6) +
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 30, hjust=1, vjust=1))+
+  labs(title='房價變化',y="")
+
+```
+
+```{r}
+
+gather(data4[,c(1,3:6)],key = '房價',value = '變化', -'縣') %>%
+  ggplot(aes(縣,變化,fill=房價))+
+  geom_col(position='dodge', alpha=0.6) +
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 30, hjust=1, vjust=1))+
+  labs(title='房價',y="")
+
+```
+
+### 多元尺度分析(MDS)
+
++ 縮減尺度工具
++ 盡量維持持高、低尺度之中各資料點間的距離
+
+```{r}
+MDSdata = data3
+row.names(MDSdata) = data3[,1]
+MDSdata = MDSdata[,-1]
+
+d = dist(MDSdata, method = "euclidean")
+fit <- cmdscale(d, eig = TRUE, k = 2)
+
+```
+
++ [避免圖形文字重疊](https://officeguide.cc/r-ggrepel-ggplot2-repel-overlapping-text-labels/)
+
+```{r}
+# library(ggrepel) # 排斥重疊的文本標籤
+
+brands = rownames(MDSdata)
+percepts = colnames(MDSdata)  # percepts:知覺
+MDSdata$x = fit$points[, 1]
+MDSdata$y = fit$points[, 2]
+
+as.data.frame(fit$points) %>% ggplot(aes(MDSdata$x, MDSdata$y, label = brands))+
+  geom_point(color = 'red')+
+  theme_bw()+
+  labs(title='各縣市相似性',x='',y="")+
+  geom_text_repel()
+
+```
+
+### 主成分分析 (PCA)
+
++ 地區在變數上 相似 or 差異 行為 --> 讚
++ 變數 & 人口變動間的關係 --> 不錯
++ 變數間在各地區的關係 --> 無法
+
+```{r}
+
+set.seed(2022)
+kmg = kmeans(scale(MDSdata[,1:22]), 5)$cluster %>% factor
+table(kmg)
+
+```
+
+```{r results='hide', message=FALSE, warning=FALSE}
+pca = PCA(MDSdata[1:22], graph=F)
+get_eigenvalue(pca)
+```
+
+##### pca$var$coord： 各變數在各尺度的座標
+```{r results='hide', message=FALSE, warning=FALSE}
+pca$var$coord
+```
+
+##### pca$var$cos2： 各變數在各尺度呈現的資訊比率
+```{r results='hide', message=FALSE, warning=FALSE}
+pca$var$cos2
+```
+
+[PCA分析教程](https://blog.csdn.net/LuohenYJ/article/details/97950522)
+
+[(7)主成份分析(2012美國職棒MLB)](https://rpubs.com/skydome20/R-Note7-PCA)
+
++ 正相关的变量彼此靠近，负相关的变量南辕北辙
++ 而从中心点到变量的长度则代表着变量在这个维度所占的比例（也可以理解为质量，quality）
++ 两向量余弦值的绝对值大小反映两向量间的相关性大小
++ 值越大表明两个向量对应的属性之间相关性越高。当两个向量近似垂直时，两个属性之间相关性很弱，几乎互不影响
+
++ 两点相距较远，对应样本差异大；两点相距较近，对应样本差异小，存在相似性
+
+```{r, warning=FALSE}
+PCA(MDSdata[1:22], graph=F) %>% fviz_pca_biplot(
+  repel=T, col.var="red", col.ind=kmg,
+  alpha.ind=0.6, pointshape=16, 
+  addEllipses = T, ellipse.level = 0.65, 
+  mean.point = FALSE,labelsize=3, pointsize=3)
+```
+
+##### 平行座標
+
+[R中的平行座標](https://r-charts.com/ranking/parallel-coordinates/)
+<br>
+
++ 地區在變數上 相似 or 差異 行為 --> 因人而異
++ 變數 & 人口變動間的關係 --> 無法
++ 變數間在各地區的關係 --> 讚
+
+```{r}
+# library(MASS)
+
+MDSdata = cbind(data3[1],data3[,i+1])
+parcoord(MDSdata[2:22], col = COL2("RdYlBu" , n = 20), var.label = TRUE)
+
+# var.label = TRUE : 每個軸變量集的最小值和最大值
+
+```
+
++ [ggplot2的平行座標](https://r-charts.com/ranking/parallel-coordinates-ggplot2/)
++ [ggplot2的字體大小](https://statisticsglobe.com/change-font-size-of-ggplot2-plot-in-r-axis-text-main-title-legend)
+
+```{r}
+ggparcoord(MDSdata,
+           columns = c(6:7,9:13,18,21,22),
+           alphaLines = 0.5,
+           groupColumn = "縣",
+           showPoints = TRUE,
+           boxplot = TRUE)+
+  theme_bw()+
+  theme(legend.text = element_text ( size = 9))  # 圖例文本 
+
+# splineFactor = TRUE : 進行平滑
+# text = element_text ( size =  20 )       # 所有字體大小
+# axis.text = element_text ( size = 20 )   # 軸文本大小
+# axis .title = element_text ( size = 20 ) # 軸標題 
+# plot .title = element_text ( size = 20 ) # 繪製標題大小                
+
+
+```
+
+```{r}
+ggparcoord(MDSdata,
+           columns = c(6:7,9:13,18,21,22),
+           alphaLines = 0.5,
+           groupColumn = "縣",
+           showPoints = TRUE)+
+  theme_bw()+
+  theme(legend.text = element_text ( size = 9)) -> p4      # 圖例文本 
+
+ggplotly(p4)
+
+# splineFactor = TRUE : 進行平滑
+# text = element_text ( size =  20 )       # 所有字體大小
+# axis.text = element_text ( size = 20 )   # 軸文本大小
+# axis .title = element_text ( size = 20 ) # 軸標題 
+# plot .title = element_text ( size = 20 ) # 繪製標題大小                
+
+
+```
+
+```{r results='hide', message=FALSE, warning=FALSE, echo=F}
+ggparcoord(MDSdata,
+           columns = c(6:7,9:13,18,21,22),
+           alphaLines = 0.5,
+           groupColumn = "縣",
+           showPoints = TRUE,
+           boxplot = TRUE,
+           scale = "robust"        # 穩健
+           )
+
+ggparcoord(MDSdata,
+           columns = c(6:7,9:13,18,21,22),
+           alphaLines = 0.5,
+           groupColumn = "縣",
+           showPoints = TRUE,
+           boxplot = TRUE,
+           scale = "uniminmax"     # 歸一化
+           )
+
+ggparcoord(MDSdata,
+           columns = c(6:7,9:13,18,21,22),
+           alphaLines = 0.5,
+           groupColumn = "縣",
+           showPoints = TRUE,
+           boxplot = TRUE,
+           scale = "globalminmax"  # 無縮放
+           )
+
+ggparcoord(MDSdata,
+           columns = c(6:7,9:13,18,21,22),
+           alphaLines = 0.5,
+           groupColumn = "縣",
+           showPoints = TRUE,
+           boxplot = TRUE,
+           scale = "center"  # 無縮放
+           )
+
+ggparcoord(MDSdata,
+           columns = c(6:7,9:13,18,21,22),
+           alphaLines = 0.5,
+           groupColumn = "縣",
+           showPoints = TRUE,
+           boxplot = TRUE,
+           scale = "centerObs"  # 無縮放
+           )
+
+# splineFactor = TRUE : 進行平滑
+
+```
+
+```{r}
+ggparcoord(MDSdata,
+           columns = c(2:7,9:13,18,21,22),
+           alphaLines = 0.3,
+           groupColumn = "縣",
+           showPoints = TRUE,
+           boxplot = TRUE)+
+  theme_bw()
+
+```
+<br><br>
+### 結果:解釋 & 推測
+<br>
+
+##### PS:台北社會變遷獨大
+
++ D10.2 =  人口密度 : -0.62	--> 人越少走越多人 --> 地廣人稀
++ A10.1	=  平均每人居住面積 : 0.26 --> 住越大走越多人 --> 交通 發展緩等
++ c5 	 =  犯罪人口率(人/10萬) : -0.6 --> 越小反而走越多人，都市、 鄉下差別
++ M9 	 =  平均每人賦稅 : -0.5 --> 越小反而走越多人，可能受台北影響(都市便利性>稅赋)
++ I9 	 =  每戶可支配所得 : -0.17 --> 越小反而走越多人，可能受台北影響(都市便利性>稅赋)
++ e2.1 =  108年失業率 : 0.35 --> 越大走越多人
++ e2.2 =  109年失業率 :	0.12 --> 越大走越多人
++ o7 	 =  老化指數 : -0.3 --> (老年少 or 幼年多)少，反而走越多人，受台北生活不易影響
++ t6   =  平均交通意外發生數 : 0.3 --> 越大越危險走越多人
++ E8   =  政府歲出 : -0.11 --> 資源越少走越多人
++ n4.1 =  醫療家數 : -0.3 --> 資源越少走越多人
++ n4.2 =  護產機構數 : 0.15 --> 越多老年人、安養院等，走越多人(移居)
+
+<br>
+
++ H1.5  =   房 :		     0.02
++ H1.6  =   房 :		     0.01
++ V3    =   耕地率 :	     -0.007
++ H1.4  =   房 : 		     -0.01
++ H1.2  =   房 : 		     -0.01
++ H1.3  =   房 :		     -0.01
++ H1.1  =   房 :		     -0.02
+
+##### 兩年太短 , 變化太小不足以影響
+##### 耕地率大致已固定 , 短時間難有變化
+
+
++ e2    =  失業率增加 :          -0.14
+
+##### 雖然相關性小 , 不用太注重，但還是想不出來可能理由
+
+<br>
+
+#### 總結
+#### 相關性搭配數字看的效果比較不易被誤導
+#### 直覺看圖 , 觀察細節看數字
+
+
+<br><br><hr>
+
